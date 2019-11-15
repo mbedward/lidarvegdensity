@@ -1,5 +1,5 @@
 ## usethis namespace: start
 #' @importFrom Rcpp sourceCpp
-#' @useDynLib lidarvoxel, .registration = TRUE
+#' @useDynLib lidarvegdensity, .registration = TRUE
 ## usethis namespace: end
 NULL

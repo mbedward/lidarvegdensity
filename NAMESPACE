@@ -2,4 +2,4 @@
 
 export(estimate_max_returns)
 importFrom(Rcpp,sourceCpp)
-useDynLib(lidarvoxel, .registration = TRUE)
+useDynLib(lidarvegdensity, .registration = TRUE)
