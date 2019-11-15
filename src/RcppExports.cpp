@@ -8,7 +8,7 @@ using namespace Rcpp;
 
 // rays_in_voxels
 NumericVector rays_in_voxels(NumericMatrix scandata, int numcols, int numheights, double xysize, double minxy, double maxxy, double zsize, double minz, double maxz, double maxdist);
-RcppExport SEXP _lidarvoxel_rays_in_voxels(SEXP scandataSEXP, SEXP numcolsSEXP, SEXP numheightsSEXP, SEXP xysizeSEXP, SEXP minxySEXP, SEXP maxxySEXP, SEXP zsizeSEXP, SEXP minzSEXP, SEXP maxzSEXP, SEXP maxdistSEXP) {
+RcppExport SEXP _lidarvegdensity_rays_in_voxels(SEXP scandataSEXP, SEXP numcolsSEXP, SEXP numheightsSEXP, SEXP xysizeSEXP, SEXP minxySEXP, SEXP maxxySEXP, SEXP zsizeSEXP, SEXP minzSEXP, SEXP maxzSEXP, SEXP maxdistSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -28,11 +28,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_lidarvoxel_rays_in_voxels", (DL_FUNC) &_lidarvoxel_rays_in_voxels, 10},
+    {"_lidarvegdensity_rays_in_voxels", (DL_FUNC) &_lidarvegdensity_rays_in_voxels, 10},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_lidarvoxel(DllInfo *dll) {
+RcppExport void R_init_lidarvegdensity(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

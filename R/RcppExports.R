@@ -2,6 +2,6 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 rays_in_voxels <- function(scandata, numcols, numheights, xysize, minxy, maxxy, zsize, minz, maxz, maxdist) {
-    .Call(`_lidarvoxel_rays_in_voxels`, scandata, numcols, numheights, xysize, minxy, maxxy, zsize, minz, maxz, maxdist)
+    .Call(`_lidarvegdensity_rays_in_voxels`, scandata, numcols, numheights, xysize, minxy, maxxy, zsize, minz, maxz, maxdist)
 }
 
