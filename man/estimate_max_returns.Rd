@@ -17,8 +17,8 @@ metres.}
 \item{zsize}{The vertical size (height) of voxels in metres.}
 
 \item{numcols}{The integer number of voxel colums in the X and Y direction.
-This should be an odd value so that the scanner lies in the centre column.
-If an even value is provided it will be adjusted to the next odd value.}
+Ashcroft et al. recommend that this be an odd value so that the scanner
+lies in the centre column, but this is not enforced here.}
 
 \item{zmax}{The maximum height of the scan (relative to the scanner) in
 metres. Default value is 35.25 as used by Ashcroft et al. This will usually

@@ -13,8 +13,8 @@
 #' @param zsize The vertical size (height) of voxels in metres.
 #'
 #' @param numcols The integer number of voxel colums in the X and Y direction.
-#'   This should be an odd value so that the scanner lies in the centre column.
-#'   If an even value is provided it will be adjusted to the next odd value.
+#'   Ashcroft et al. recommend that this be an odd value so that the scanner
+#'   lies in the centre column, but this is not enforced here.
 #'
 #' @param zmax The maximum height of the scan (relative to the scanner) in
 #'   metres. Default value is 35.25 as used by Ashcroft et al. This will usually
@@ -46,11 +46,6 @@ estimate_max_returns <- function(scandata, xysize, zsize, numcols,
   } else {
     zmin <- .single_numeric(zmin)
     if (zmin >= zmax) stop("Value of zmin must be less than zmax")
-  }
-
-  if (numcols %% 2 == 0) {
-    numcols <- numcols + 1
-    message("Adjusted numcols to ", numcols)
   }
 
   # total limits of the columns
