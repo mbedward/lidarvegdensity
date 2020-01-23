@@ -6,9 +6,9 @@
 
 using namespace Rcpp;
 
-// rays_in_voxels
-NumericVector rays_in_voxels(NumericMatrix scandata, int numcols, int numheights, double xysize, double minxy, double maxxy, double zsize, double minz, double maxz, double maxdist);
-RcppExport SEXP _lidarvegdensity_rays_in_voxels(SEXP scandataSEXP, SEXP numcolsSEXP, SEXP numheightsSEXP, SEXP xysizeSEXP, SEXP minxySEXP, SEXP maxxySEXP, SEXP zsizeSEXP, SEXP minzSEXP, SEXP maxzSEXP, SEXP maxdistSEXP) {
+// cpp_count_voxel_rays
+List cpp_count_voxel_rays(NumericMatrix scandata, int numcols, int numheights, double xysize, double minxy, double maxxy, double zsize, double minz, double maxz, double maxdist, bool countReflected, Rcpp::Nullable<NumericMatrix> groundarg);
+RcppExport SEXP _lidarvegdensity_cpp_count_voxel_rays(SEXP scandataSEXP, SEXP numcolsSEXP, SEXP numheightsSEXP, SEXP xysizeSEXP, SEXP minxySEXP, SEXP maxxySEXP, SEXP zsizeSEXP, SEXP minzSEXP, SEXP maxzSEXP, SEXP maxdistSEXP, SEXP countReflectedSEXP, SEXP groundargSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -22,13 +22,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type minz(minzSEXP);
     Rcpp::traits::input_parameter< double >::type maxz(maxzSEXP);
     Rcpp::traits::input_parameter< double >::type maxdist(maxdistSEXP);
-    rcpp_result_gen = Rcpp::wrap(rays_in_voxels(scandata, numcols, numheights, xysize, minxy, maxxy, zsize, minz, maxz, maxdist));
+    Rcpp::traits::input_parameter< bool >::type countReflected(countReflectedSEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<NumericMatrix> >::type groundarg(groundargSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_count_voxel_rays(scandata, numcols, numheights, xysize, minxy, maxxy, zsize, minz, maxz, maxdist, countReflected, groundarg));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_lidarvegdensity_rays_in_voxels", (DL_FUNC) &_lidarvegdensity_rays_in_voxels, 10},
+    {"_lidarvegdensity_cpp_count_voxel_rays", (DL_FUNC) &_lidarvegdensity_cpp_count_voxel_rays, 12},
     {NULL, NULL, 0}
 };
 

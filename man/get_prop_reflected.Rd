@@ -11,7 +11,7 @@ get_prop_reflected(scandata, refdata, ground)
 relative to the scanner.}
 
 \item{refdata}{A named list, as returned by the functcion
-\code{get_max_returns()}, containing a matrix of the estimated maximum
+\code{get_max_returns()}, containing an array of the estimated maximum
 number of returns for each voxel plus the voxel and scan dimensions.}
 
 \item{ground}{A square matrix where values are ground elevation for each
@@ -19,11 +19,21 @@ voxel. The dimensions of the matrix must match the value of element
 \code{numcols} in \code{refdata}.}
 }
 \value{
-A matrix where cell values are proportion of rays reflected for each voxel
-  based on the reference data for the potential maximum number.
+A named list with the following elements:
+  \describe{
+  \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
+    reflected for each voxel.}
+  \item{xysize}{The horizontal voxel width.}
+  \item{xlims}{A vector of min and max values for X and Y ordinates.}
+  \item{zsize}{The vertical voxel width.}
+  \item{zlims}{A vector or min and max values for Z (height).}
+  \item{numcols}{NUmber of voxels in each horizontal dimension.}
+  \item{numheights}{Number of voxels in vertical dimension.}
+  }
 }
 \description{
-This function takes scan data for a vegetation site, together with a matrix of
-max returns per voxel generated using the function \code{get_max_returns()},
-and calculates something...
+This function takes scan data for a vegetation site, together with a reference
+object giving the maximum expected number of returns per voxel, and calculates
+the proportion of rays reflected for each voxel. The reference object is
+generated using the function \code{get_max_returns()}.
 }

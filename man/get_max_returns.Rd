@@ -4,8 +4,7 @@
 \alias{get_max_returns}
 \title{Estimate the potential maximum number of returns for voxels}
 \usage{
-get_max_returns(scandata, xysize, zsize, numcols, zmax = 35.25,
-  zmin = NULL)
+get_max_returns(scandata, xysize, zsize, numcols, zmax = 35.25, zmin = NULL)
 }
 \arguments{
 \item{scandata}{A three column matrix of XYZ coordinates for return positions
@@ -33,10 +32,8 @@ provided.}
 \value{
 A named list with the following elements:
   \describe{
-  \item{returns}{A matrix of maximum return values for voxels. Rows
-  correspond to horizontal position, ordered (ascending) by X position within
-  Y position. Columns correspond to vertical position, ordered (ascending) by
-  height.}
+  \item{returns}{An array (dimensions: X, Y, Z) of maximum return values for
+    voxels.}
   \item{xysize}{The horizontal voxel width.}
   \item{xlims}{A vector of min and max values for X and Y ordinates.}
   \item{zsize}{The vertical voxel width.}

@@ -28,10 +28,8 @@
 #'
 #' @return A named list with the following elements:
 #'   \describe{
-#'   \item{returns}{A matrix of maximum return values for voxels. Rows
-#'   correspond to horizontal position, ordered (ascending) by X position within
-#'   Y position. Columns correspond to vertical position, ordered (ascending) by
-#'   height.}
+#'   \item{returns}{An array (dimensions: X, Y, Z) of maximum return values for
+#'     voxels.}
 #'   \item{xysize}{The horizontal voxel width.}
 #'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
 #'   \item{zsize}{The vertical voxel width.}
@@ -73,284 +71,214 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 
   # max and min height in metres, ensuring that they are
   # multiples of zsize
-  zlims <- c('min' = (trunc(zmin / zsize) - 1) * zsize,
-             'max' = (trunc(zmax / zsize) + 1) * zsize)
+  zlims.working <- c(
+    (trunc(zmin / zsize) - 1) * zsize,
+    (trunc(zmax / zsize) + 1) * zsize)
 
-  numheights <- diff(zlims) / zsize
+  numheights <- abs(diff(zlims.working) / zsize)
   stopifnot(numheights > 0)
 
   # calculate maximum distance of points from scanner
-  maxzdist <- max(abs(c(maxz, minz)))
+  maxzdist <- max(abs(zlims.working))
   maxdist <- sqrt(2*xylims[2]^2 + maxzdist^2)
 
-  # Call Rcpp function to count returns for each voxel
-  counts <- rays_in_voxels(
+  # Call Rcpp function to count the number of rays passing through
+  # each voxel
+  counts <- cpp_count_voxel_rays(
     scandata,
     numcols, numheights,
     xysize, xylims[1], xylims[2],
-    zsize, zlims[1], zlims[2],
+    zsize, zlims.working[1], zlims.working[2],
     maxdist
   )
 
-  # Format as matrix where rows are horizontal voxel position ordered
-  # by X within Y; columns are vertical position ordered by Z
-  counts <- matrix(counts, ncol = numheights)
+  # Reshape the returned vector into an array
+  # (the cpp_count_voxel_rays function should have ordered the
+  # vector appropriately)
+  counts <- array(counts$total, dim = c(numcols, numcols, numheights))
 
   list(returns = counts,
        xysize = xysize, xylims = xylims,
-       zsize = zsize, zlims = zlims,
+       zsize = zsize, zlims = c(zmin, zmax),
        numcols = numcols, numheights = numheights)
 }
 
 
 #' Main function to process scans
 #'
-#' This function takes scan data for a vegetation site, together with a matrix of
-#' max returns per voxel generated using the function \code{get_max_returns()},
-#' and calculates something...
+#' This function takes scan data for a vegetation site, together with a reference
+#' object giving the maximum expected number of returns per voxel, and calculates
+#' the proportion of rays reflected for each voxel. The reference object is
+#' generated using the function \code{get_max_returns()}.
 #'
 #' @param scandata A three column matrix of XYZ coordinates for return positions
 #'   relative to the scanner.
 #'
 #' @param refdata A named list, as returned by the functcion
-#'   \code{get_max_returns()}, containing a matrix of the estimated maximum
+#'   \code{get_max_returns()}, containing an array of the estimated maximum
 #'   number of returns for each voxel plus the voxel and scan dimensions.
 #'
 #' @param ground A square matrix where values are ground elevation for each
 #'   voxel. The dimensions of the matrix must match the value of element
 #'   \code{numcols} in \code{refdata}.
 #'
-#' @return A matrix where cell values are proportion of rays reflected for each voxel
-#'   based on the reference data for the potential maximum number.
+#' @return A named list with the following elements:
+#'   \describe{
+#'   \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
+#'     reflected for each voxel.}
+#'   \item{xysize}{The horizontal voxel width.}
+#'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
+#'   \item{zsize}{The vertical voxel width.}
+#'   \item{zlims}{A vector or min and max values for Z (height).}
+#'   \item{numcols}{NUmber of voxels in each horizontal dimension.}
+#'   \item{numheights}{Number of voxels in vertical dimension.}
+#'   }
 #'
+#' @export
 #'
-# rawscandata is the scan you are interested in, nullmodel is the array produced NULL12,
-# ground is a DTM at the same resolution as columnsize/heightsize. I have included
-# comments on what is going on below. My comments are not aligned with the rest of
-# the text
-
 get_prop_reflected <- function(scandata, refdata, ground) {
-
+  numcols <- refdata$numcols
+  xylims <- refdata$xylims
   xysize <- refdata$xysize
   zsize <- refdata$zsize
 
-  if (nrow(ground) != refdata$numcols ||
-      ncol(ground) != refdata$numcols) {
+  # Check that scan points are within the bounds of the reference model
+  inside.ref <- scandata[,1] >= xylims[1] &&
+    scandata[,1] <= xylims[2] &&
+    scandata[,2] >= xylims[1] &&
+    scandata[,2] <= xylims[2]
 
-    stop("The matrix of ground elevations should be square, with number of\n",
-         "rows and columns equal to the 'numcols' value in refdata")
+  if (any(!inside.ref)) {
+    n <- sum(!inside.ref)
+    msg <- ifelse(n == 1, "point is outside", "points are outside")
+    msg <- glue::glue("{n} {msg} the bounds of the reference model and will be ignored")
+    warning(msg)
+  }
+
+  # Check ground elevation data
+  if (is.matrix(ground)) {
+    if (nrow(ground) != refdata$numcols ||
+        ncol(ground) != refdata$numcols) {
+
+      stop("The matrix of ground elevations should be square, with number of\n",
+           "rows and columns equal to the 'numcols' value in refdata")
+    }
+
+  } else if (is.numeric(ground)) {
+    ground <- .single_numeric(ground)
+    ground <- matrix(ground, numcols, numcols)
+
+  } else {
+    stop("Argument ground should either be a square matrix with number of\n",
+         "rows and columns equal to the 'numcols' value in refdata, or a\n",
+         "single value for ground elevation to apply to all voxels.")
+  }
+
+  # If there are any NA values in ground, set these to the mean
+  # non-NA neighbour value. If any cells have only missing neighbour values
+  # set these (arbitrarily) to the min ground value and issue a warning.
+  if (anyNA(ground)) {
+    warn.nas <- FALSE
+    di <- -1:1
+    km <- matrix(0, nrow=9, ncol=2)
+    clamp <- function(x) max(1,min(x)):min(numcols,max(x))
+    for (ir in 1:numcols) {
+      for (ic in 1:numcols) {
+        x <- 0
+        n <- 0
+        for (kr in clamp(ir + d)) {
+          for (kc in clamp(ic + d)) {
+            g <- ground[kr, kc]
+            if (!is.na(g)) {
+              x <- x + g
+              n <- n + 1
+            }
+          }
+        }
+        if (n > 0) ground[ir, ic] <- x/n
+        else {
+          ground[ir, ic] <- ground.minz
+          warn.nas <- TRUE
+        }
+      }
+    }
+
+    if (warn.nas)
+      warning("Ground elevation for one or more cells could not be determined.\n",
+              "Cell values have been set to overall minimum value.")
   }
 
   # Determine the height range and number of voxel height levels.
   # We clamp the height limits to multiples of zsize.
+  ground.minz <- min(ground, na.rm = TRUE)
+  minz <- (trunc(ground.minz / zsize) - 1) * zsize
   maxz <- (trunc(max(scandata[,3]) / zsize) + 1) * zsize
-  minz <- (trunc(min(ground, na.rm = TRUE) / zsize) - 1) * zsize
+
+  stopifnot(maxz > minz)
   numheights <- (maxz - minz) / zsize
 
-  # Height offset value used to relate vertical voxel position in scan to
-  # position in refdata
-  # TODO - is this really necessary?
-  zoffset <- (minz + 150) / zsize
 
-  # maximum distance based on the processing extent defined earlier.
+  # Find the index of the height dimension in the reference data array
+  # that corresponds with the ground elevation for each voxel column
+  ground.minzindex <- trunc((ground - refdata$zlims[1]) / zsize) + 1
+
+  # Z-index offset for reference model.
+  ref.zoffset <- (minz - refdata$zlims[1]) / zsize
+
   # calculate maximum distance of points from scanner
-  maxzdist <- max(abs(maxz),abs(minz))
-  maxdist <- sqrt(2*maxxy^2 + maxzdist^2)
+  maxzdist <- max(abs(c(maxz, minz)))
+  maxdist <- sqrt(2*xylims[2]^2 + maxzdist^2)
 
-  #These are the arrays where the data is stored
-  # create arrays to store number of ray segments in each rectangular prism
+  # Call Rcpp function to count the total number of rays entering each voxel,
+  # the number reflected, and the number passing through.
+  counts <- cpp_count_voxel_rays(
+    scandata,
+    numcols, numheights,
+    xysize, xylims[1], xylims[2],
+    zsize, minz, maxz,
+    maxdist,
+    TRUE,
+    ground
+  )
 
-  # prismrays stores according to raw z values (minz to maxz) and is the total
-  # number of rays (blocked before reaching this prism, reflected from this prism +
-  # passed through this prism)
+  totalrays <- array(counts$total, dim = c(numcols, numcols, numheights))
+  reflectedrays <- array(counts$reflected, dim = c(numcols, numcols, numheights))
+  throughrays <- array(counts$through, dim = c(numcols, numcols, numheights))
 
-  # throughrays and returnrays are stored according to ground level (0 to maxz-minz)
-  # throughrays is number that pass through the prism without reflecting back
-  # reflectedrays is number that are reflected back from within this prism
-  numprisms <- numcolumns * numcolumns * numheights
-  prismrays <- rep(0, numprisms)
-  dim(prismrays) <- c(numcolumns, numcolumns, numheights)
-  throughrays <- reflectedrays <- prismrays
-  print(paste("Finished creating output arrays: ",date()))
+  # To account for rays that went through a voxel without being returned, compare
+  # right through the vegetation without being returned. We need to add these rays
+  # into the 'through' tally by comaprison with a null model in a closed room.
+  for (xindex in 1:numcols) {
+    for (yindex in 1:numcols) {
+      for (zindex in 1:numheights) {
+        # Check if we have less rays in the voxel than expected (because
+        # some went through). If so, increase the through count.
+        expected <- refdata$returns[xindex, yindex, zindex + ref.zoffset]
+        if (totalrays[xindex,yindex,zindex] < expected) {
+          nadd <- expected - totalrays[xindex, yindex, zindex]
 
-  # We are going to go through point by point, creating a laser ray and dividing it
-  # into segments that are each zsize in length. This is equivalent to
-  # the vertical distance between each height class.
-  # For each segment we will determine if the ray is blocked (reflection occurred before
-  # segment), reflected (reflection occurred in segment) or through (reflection
-  # occurred after segment) and add the totals to our output arrays
-
-
-  #This is the main process for the function and takes the longets. It runs through every beam and finds which voxels it passed through and which voxel it recived a return from. Given there are over 14 million returns it can take a long time to process. There are reasonably good details about what is going on here.
-  # iterate through each ray
-  for (rayindex in 1:length(scandata[,1]))
-  {
-    debug <- FALSE
-    # provide debug info every 50000 points
-    # comment out these lines to remove debug
-    #if ((rayindex-1) == (trunc((rayindex-1)/50000)*50000))
-    #{
-    #	debug <- TRUE
-    #}
-
-    # get the ray data for this point
-    xo <- scandata[rayindex,1]
-    yo <- scandata[rayindex,2]
-    zo <- scandata[rayindex,3]
-    lengthtoreflection <- sqrt(xo^2 + yo^2 + zo^2)
-
-    # the points between segments can be written as x,y,z = k.c.(xo,yo,zo) where k is
-    # an integer and c is a constant that ensures each segment has length zsize
-    c <- zsize/lengthtoreflection
-
-    # work out how many segments within range
-    maxtotsegments <- trunc(maxdist / zsize) + 1
-    maxxsegments <- trunc(maxxy / abs(c * xo) + 0.4999999999)
-    maxysegments <- trunc(maxxy / abs(c * yo) + 0.4999999999)
-    if (zo < 0)
-    {
-      maxzsegments <- trunc(abs(minz / (c * zo)) + 0.4999999999)
-    }		else
-    {
-      maxzsegments <- trunc(abs(maxz / (c * zo)) + 0.4999999999)
-    }
-    numsegments <- min(maxtotsegments, maxxsegments, maxysegments, maxzsegments)
-
-    # work out the segment the reflection is in
-    reflectedsegment <- trunc(lengthtoreflection / zsize) + 1
-
-    if (debug)
-    {
-      print(paste("raynum: ",rayindex, " ", date()))
-      print(paste("ray: ",xo, " ", yo, " ", zo))
-      print(paste("lengths: ",lengthtoreflection, " ", c))
-      print(paste("maxs: ",maxtotsegments," ", maxxsegments, " ",maxysegments," ",
-                  maxzsegments))
-      print(paste("reflected segment: ",reflectedsegment))
-    }
-
-    # loop over segments
-    for (k in 1:numsegments)
-    {
-
-      # creating points at midpoints (k=0.5,1.5,etc)
-      xn = (k - 0.5) * c * xo
-      yn = (k - 0.5) * c * yo
-      zn = (k - 0.5) * c * zo
-
-      # need to know which column the midpoint is in
-      xcol <- trunc((xn - minxy) / columnsize) + 1
-      ycol <- trunc((yn - minxy) / columnsize) + 1
-
-      # and need the z columns (raw for prismrays, adj for others)
-      zcol <- trunc((zn - minz) / zsize) + 1
-
-      if (debug)
-      {
-        print(paste(k, " ",xn," ",yn," ",zn," ",xcol," ",ycol," ",zcol))
-        print(ground[xcol,ycol])
-      }
-      # and need the adjusted height / col
-      znadj <- zn - ground[xcol,ycol]
-      zcoladj <- trunc(znadj / zsize)  + 1
-
-      if (debug)
-      {
-        print(paste(znadj," ",zcoladj))
-      }
-
-      # inc total number of rays in the prism
-      prismrays[xcol, ycol, zcol] <- prismrays[xcol, ycol, zcol] + 1
-
-      # and add to blocked etc, if it is above ground level
-      if (znadj > 0)
-      {
-        if (k == reflectedsegment)
-        {
-          if (debug)
-          {
-            print("Reflected")
-          }
-          reflectedrays[xcol,ycol,zcoladj] <- reflectedrays[xcol,ycol,zcoladj] + 1
-        }
-        else if (k < reflectedsegment)
-        {
-          if (debug)
-          {
-            print("Through")
-          }
-          throughrays[xcol,ycol,zcoladj] <- throughrays[xcol,ycol,zcoladj] + 1
-        }
-      }
-      # we won't count blocked rays, as canopy cover is determined by ratio of reflected
-      # to reflected + through. Blocked didn't get far enough to provide any indication
-      # of canopy cover, but we still need to loop through all segments to increment
-      # prismrays
-    }
-  }
-
-  print(paste("Finished processing laser points: ",date()))
-
-  #This section also takes a while, but not as long.
-
-  # We've gone through all the points provided in the scan, but some rays went right through the canopy without
-  # being returned. We need to add these rays into the 'through' tally by comaprison with a null model in
-  # a closed room.
-  for (xindex in 1:numcolumns)
-  {
-    for (yindex in 1:numcolumns)
-    {
-      for (zindex in 1:numheights)
-      {
-        zminlimit <- (zindex-1) * zsize + minz
-        zmaxlimit <- zindex * zsize + minz
-        if (prismrays[xindex,yindex,zindex] < refdata[xindex+(yindex-1)*numcolumns,zindex+zoffset])
-        {
-          # we have less rays in this prism than expected. Let's add them in
-          # at random.
-          for (index in 1:(refdata[xindex+(yindex-1)*numcolumns,zindex+zoffset]
-                           - prismrays[xindex,yindex,zindex]))
-          {
-            # Create a random point in this prism
-            # for x and y we can use original indexes, but z will change
-            # according to ground level calculation
-            #z <- zminlimit + runif(1) * (zmaxlimit - zminlimit)
-            z <- zminlimit + 0.5 * (zmaxlimit - zminlimit)
-            zadj <- z - ground[xindex,yindex]
-            zcoladj <- trunc(zadj / zsize)  + 1
-            throughrays[xindex,yindex,zcoladj] <-
-              throughrays[xindex,yindex,zcoladj] + 1
-          }
+          zminlimit <- (zindex-1) * zsize + minz
+          z <- zminlimit + zsize/2
+          zadj <- z - ground[xindex,yindex]
+          zcoladj <- trunc(zadj / zsize) + 1
+          throughrays[xindex,yindex,zcoladj] <- throughrays[xindex,yindex,zcoladj] + nadd
         }
       }
     }
   }
 
-  print(paste("Finished adding random through lasers based on null model: ",date()))
+  # Return proportions
+  preflect <- reflectedrays / (reflectedrays + throughrays)
 
-  # create an array to hold our output. Number of rows = numcolumns x numcolumns.
-  # number of columns = numheights. Output is ratio of reflected:(reflect + through)
-  output<- rep(0, (numcolumns * numcolumns * numheights))
-  dim(output) <- c(numcolumns * numcolumns, numheights)
+  # Guard against NaN which occur when a voxel in both reflectedrays
+  # and throughrays has a zero count
+  preflect[is.nan(preflect)] <- 0
 
-  # Fill in the data
-  for (xindex in 1:numcolumns)
-  {
-    for (yindex in 1:numcolumns)
-    {
-      for (zindex in 1:numheights)
-      {
-        output[xindex+(yindex-1)*numcolumns,zindex] <-
-          reflectedrays[xindex,yindex,zindex] /
-          (reflectedrays[xindex,yindex,zindex] +
-             throughrays[xindex,yindex,zindex])
-      }
-    }
-  }
-  print(paste("Finished processing: ",date()))
-
-  return(output)
-} # endfunction
+  list(preflect = preflect,
+       xysize = xysize, xylims = xylims,
+       zsize = zsize, zlims = c(minz, maxz),
+       numcols = numcols, numheights = numheights)
+}
 
 
 
