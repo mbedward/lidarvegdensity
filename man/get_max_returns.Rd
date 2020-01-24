@@ -25,20 +25,20 @@ be a positive value (uppermost voxel above scanner) but zero and negative
 values are also valid.}
 
 \item{zmin}{The minimum height of the scan (relative to the scanner) in
-metres. Must be less than \code{zmax}. Defaults to \code{-zmax} if zmax is
-positive. If \code{zmax} is zero or negative an explicit value must be
-provided.}
+metres. Must be less than \code{zmax}. Defaults to minus \code{zmax} if
+zmax is positive. If \code{zmax} is zero or negative an explicit value must
+be provided.}
 }
 \value{
 A named list with the following elements:
   \describe{
-  \item{returns}{An array (dimensions: X, Y, Z) of maximum return values for
-    voxels.}
+  \item{returns}{An array (dimensions: X, Y, Z) of maximum expected number
+    of rays passing through each voxel.}
   \item{xysize}{The horizontal voxel width.}
   \item{xlims}{A vector of min and max values for X and Y ordinates.}
   \item{zsize}{The vertical voxel width.}
   \item{zlims}{A vector or min and max values for Z (height).}
-  \item{numcols}{NUmber of voxels in each horizontal dimension.}
+  \item{numcols}{Number of voxels in each horizontal dimension.}
   \item{numheights}{Number of voxels in vertical dimension.}
   }
 }

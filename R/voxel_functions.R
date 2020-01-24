@@ -22,19 +22,19 @@
 #'   values are also valid.
 #'
 #' @param zmin The minimum height of the scan (relative to the scanner) in
-#'   metres. Must be less than \code{zmax}. Defaults to \code{-zmax} if zmax is
-#'   positive. If \code{zmax} is zero or negative an explicit value must be
-#'   provided.
+#'   metres. Must be less than \code{zmax}. Defaults to minus \code{zmax} if
+#'   zmax is positive. If \code{zmax} is zero or negative an explicit value must
+#'   be provided.
 #'
 #' @return A named list with the following elements:
 #'   \describe{
-#'   \item{returns}{An array (dimensions: X, Y, Z) of maximum return values for
-#'     voxels.}
+#'   \item{returns}{An array (dimensions: X, Y, Z) of maximum expected number
+#'     of rays passing through each voxel.}
 #'   \item{xysize}{The horizontal voxel width.}
 #'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
 #'   \item{zsize}{The vertical voxel width.}
 #'   \item{zlims}{A vector or min and max values for Z (height).}
-#'   \item{numcols}{NUmber of voxels in each horizontal dimension.}
+#'   \item{numcols}{Number of voxels in each horizontal dimension.}
 #'   \item{numheights}{Number of voxels in vertical dimension.}
 #'   }
 #'
@@ -109,12 +109,26 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #' This function takes scan data for a vegetation site, together with a reference
 #' object giving the maximum expected number of returns per voxel, and calculates
 #' the proportion of rays reflected for each voxel. The reference object is
-#' generated using the function \code{get_max_returns()}.
+#' generated using the function \code{get_max_returns()}. Optionally, Bayesian
+#' credible intervals can be calculated for the proportion values by specifying
+#' one or more probability values via the \code{probs} argument. See details below.
 #'
-#' @param scandata A three column matrix of XYZ coordinates for return positions
-#'   relative to the scanner.
+#' Bayesian credible intervals on proportions are based on a non-informative
+#' Jeffrey's prior distribution. For a given probability p, this involves taking
+#' the lower (\code{(1-p)/2}) and upper (\code{(1+p)/2}) quantiles from a
+#' \code{Beta(1/2 + r, 1/2 + t)} distribution, where r is the number of
+#' reflected rays (returns) for the voxel, and t is the number of rays passing
+#' through the voxel without being reflected. For voxels where no rays were
+#' reflected, the lower bound is set to 0. For voxels where all rays were
+#' reflected, the upper bound is set to 1. If a voxel was not crossed by any
+#' rays, its calculated proportion will be missing (\code{NaN}) and the interval
+#' will be set to \code{[0, 1]}.
 #'
-#' @param refdata A named list, as returned by the functcion
+#' @param scandata Either a three column matrix or data frame of XYZ coordinates
+#'   for return positions relative to the scanner; or a \code{LAS} object as
+#'   returned by \code{lidR::readLAS}.
+#'
+#' @param refdata A named list, as returned by the function
 #'   \code{get_max_returns()}, containing an array of the estimated maximum
 #'   number of returns for each voxel plus the voxel and scan dimensions.
 #'
@@ -122,10 +136,19 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #'   voxel. The dimensions of the matrix must match the value of element
 #'   \code{numcols} in \code{refdata}.
 #'
+#' @param probs Optionally, one or more probability values (0 to 1). If
+#'   provided, bounds on the proportion of reflected rays are calculated for
+#'   each voxel. For example, with \code{probs = c(0.5, 0.9)} lower and upper
+#'   50 and 90 percent bounds will be calculated.
+#'
 #' @return A named list with the following elements:
 #'   \describe{
 #'   \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
 #'     reflected for each voxel.}
+#'   \item{bounds_XX}{If argument probs was specified, arrays for lower and
+#'     upper bounds on calculated proportions will be included,
+#'     e.g. setting probs = 0.9 will results in two arrays 'bounds_0.05'
+#'     and 'bounds_0.95'}
 #'   \item{xysize}{The horizontal voxel width.}
 #'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
 #'   \item{zsize}{The vertical voxel width.}
@@ -136,7 +159,25 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #'
 #' @export
 #'
-get_prop_reflected <- function(scandata, refdata, ground) {
+get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
+
+  if (inherits(scandata, "LAS")) {
+    scandata <- as.matrix(scandata@data[, c("X", "Y", "Z")])
+
+  } else if (is.matrix(scandata) || is.data.frame(scandata)) {
+    if (!ncol(scandata) == 3) {
+      stop("Argument scandata should be a three column matrix or data frame")
+    }
+    scandata <- as.matrix(scandata)
+  }
+
+  # Check probs argument
+  if (length(probs) > 0) {
+    if (!is.numeric(probs) || !is.vector(probs) || !all(probs > 0 & probs < 1)) {
+      stop("Argument probs should be a vector of one or more values between 0 and 1")
+    }
+  }
+
   numcols <- refdata$numcols
   xylims <- refdata$xylims
   xysize <- refdata$xysize
@@ -267,17 +308,42 @@ get_prop_reflected <- function(scandata, refdata, ground) {
     }
   }
 
-  # Return proportions
+  # Proportion of reflected rays per voxel
   preflect <- reflectedrays / (reflectedrays + throughrays)
 
   # Guard against NaN which occur when a voxel in both reflectedrays
   # and throughrays has a zero count
-  preflect[is.nan(preflect)] <- 0
+  #preflect[is.nan(preflect)] <- 0
 
-  list(preflect = preflect,
-       xysize = xysize, xylims = xylims,
-       zsize = zsize, zlims = c(minz, maxz),
-       numcols = numcols, numheights = numheights)
+  res <- list(preflect = preflect)
+
+  # Calculate bounds if probs were specified
+  if (length(probs) > 0) {
+    my <- matrix(c(reflectedrays, throughrays), ncol = 2)
+    qs <- sort(unique(c((1-probs)/2, (1+probs)/2)))
+
+    bounds <- lapply(1:length(qs), function(i) {
+      x <- qbeta(qs[i], 1/2 + my[,1], 1/2 + my[,2])
+
+      if (i <= length(probs)) { # lower bound
+        x[my[,1] == 0] <- 0
+      } else { # upper bound
+        x[my[,2] == 0] <- 1
+      }
+
+      array(x, dim = dim(reflectedrays))
+    })
+
+    names(bounds) <- paste0("bound_", qs)
+
+    res <- c(res, bounds)
+  }
+
+  # Return results
+  c(res,
+    list(xysize = xysize, xylims = xylims,
+         zsize = zsize, zlims = c(minz, maxz),
+         numcols = numcols, numheights = numheights) )
 }
 
 

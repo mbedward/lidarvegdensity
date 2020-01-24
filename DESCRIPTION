@@ -1,7 +1,7 @@
 Package: lidarvegdensity
 Type: Package
 Title: Derive vegetation density profiles from terrestrial LiDAR data
-Version: 0.1.1
+Version: 0.1.2
 Date: 2020-01-24
 Authors@R: c(
   person("Nick", "Wilson", role = "aut", email = "ncw291@uowmail.edu.au"),
@@ -20,3 +20,5 @@ LinkingTo:
     RcppArmadillo
 Imports: 
     Rcpp
+Suggests:
+    lidR

@@ -4,25 +4,35 @@
 \alias{get_prop_reflected}
 \title{Main function to process scans}
 \usage{
-get_prop_reflected(scandata, refdata, ground)
+get_prop_reflected(scandata, refdata, ground, probs = NULL)
 }
 \arguments{
-\item{scandata}{A three column matrix of XYZ coordinates for return positions
-relative to the scanner.}
+\item{scandata}{Either a three column matrix or data frame of XYZ coordinates
+for return positions relative to the scanner; or a \code{LAS} object as
+returned by \code{lidR::readLAS}.}
 
-\item{refdata}{A named list, as returned by the functcion
+\item{refdata}{A named list, as returned by the function
 \code{get_max_returns()}, containing an array of the estimated maximum
 number of returns for each voxel plus the voxel and scan dimensions.}
 
 \item{ground}{A square matrix where values are ground elevation for each
 voxel. The dimensions of the matrix must match the value of element
 \code{numcols} in \code{refdata}.}
+
+\item{probs}{Optionally, one or more probability values (0 to 1). If
+provided, bounds on the proportion of reflected rays are calculated for
+each voxel. For example, with \code{probs = c(0.5, 0.9)} lower and upper
+50 and 90 percent bounds will be calculated.}
 }
 \value{
 A named list with the following elements:
   \describe{
   \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
     reflected for each voxel.}
+  \item{bounds_XX}{If argument probs was specified, arrays for lower and
+    upper bounds on calculated proportions will be included,
+    e.g. setting probs = 0.9 will results in two arrays 'bounds_0.05'
+    and 'bounds_0.95'}
   \item{xysize}{The horizontal voxel width.}
   \item{xlims}{A vector of min and max values for X and Y ordinates.}
   \item{zsize}{The vertical voxel width.}
@@ -35,5 +45,19 @@ A named list with the following elements:
 This function takes scan data for a vegetation site, together with a reference
 object giving the maximum expected number of returns per voxel, and calculates
 the proportion of rays reflected for each voxel. The reference object is
-generated using the function \code{get_max_returns()}.
+generated using the function \code{get_max_returns()}. Optionally, Bayesian
+credible intervals can be calculated for the proportion values by specifying
+one or more probability values via the \code{probs} argument. See details below.
+}
+\details{
+Bayesian credible intervals on proportions are based on a non-informative
+Jeffrey's prior distribution. For a given probability p, this involves taking
+the lower (\code{(1-p)/2}) and upper (\code{(1+p)/2}) quantiles from a
+\code{Beta(1/2 + r, 1/2 + t)} distribution, where r is the number of
+reflected rays (returns) for the voxel, and t is the number of rays passing
+through the voxel without being reflected. For voxels where no rays were
+reflected, the lower bound is set to 0. For voxels where all rays were
+reflected, the upper bound is set to 1. If a voxel was not crossed by any
+rays, its calculated proportion will be missing (\code{NaN}) and the interval
+will be set to \code{[0, 1]}.
 }
