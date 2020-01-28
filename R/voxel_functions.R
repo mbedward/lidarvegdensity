@@ -121,8 +121,8 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #' through the voxel without being reflected. For voxels where no rays were
 #' reflected, the lower bound is set to 0. For voxels where all rays were
 #' reflected, the upper bound is set to 1. If a voxel was not crossed by any
-#' rays, its calculated proportion will be missing (\code{NaN}) and the interval
-#' will be set to \code{[0, 1]}.
+#' rays, its calculated proportion will be missing (\code{NA}) and its interval
+#' will also be set to \code{NA}.
 #'
 #' @param scandata Either a three column matrix or data frame of XYZ coordinates
 #'   for return positions relative to the scanner; or a \code{LAS} object as
@@ -311,9 +311,9 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   # Proportion of reflected rays per voxel
   preflect <- reflectedrays / (reflectedrays + throughrays)
 
-  # Guard against NaN which occur when a voxel in both reflectedrays
-  # and throughrays has a zero count
-  #preflect[is.nan(preflect)] <- 0
+  # Convert any NaN values, which occur when a voxel had no rays
+  # to NA
+  preflect[is.nan(preflect)] <- NA
 
   res <- list(preflect = preflect)
 
@@ -331,7 +331,9 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
         x[my[,2] == 0] <- 1
       }
 
-      array(x, dim = dim(reflectedrays))
+      x <- array(x, dim = dim(reflectedrays))
+      x[is.na(preflect)] <- NA
+      x
     })
 
     names(bounds) <- paste0("bound_", qs)

@@ -58,6 +58,6 @@ reflected rays (returns) for the voxel, and t is the number of rays passing
 through the voxel without being reflected. For voxels where no rays were
 reflected, the lower bound is set to 0. For voxels where all rays were
 reflected, the upper bound is set to 1. If a voxel was not crossed by any
-rays, its calculated proportion will be missing (\code{NaN}) and the interval
-will be set to \code{[0, 1]}.
+rays, its calculated proportion will be missing (\code{NA}) and its interval
+will also be set to \code{NA}.
 }
