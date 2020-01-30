@@ -143,12 +143,16 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #'
 #' @return A named list with the following elements:
 #'   \describe{
-#'   \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
+#'   \item{preflected}{An array (dimensions: X, Y, Z) of the proportion of rays
 #'     reflected for each voxel.}
 #'   \item{bounds_XX}{If argument probs was specified, arrays for lower and
 #'     upper bounds on calculated proportions will be included,
 #'     e.g. setting probs = 0.9 will results in two arrays 'bounds_0.05'
 #'     and 'bounds_0.95'}
+#'   \item{nreflected}{Array of the number of reflected rays for each voxel.}
+#'   \item{nthrough}{Array of the number of rays passing through each voxel.}
+#'   \item{nblocked}{Array of the number of rays that were blocked before
+#'     reaching each voxel.}
 #'   \item{xysize}{The horizontal voxel width.}
 #'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
 #'   \item{zsize}{The vertical voxel width.}
@@ -272,7 +276,7 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
 
   # Call Rcpp function to count the total number of rays entering each voxel,
   # the number reflected, and the number passing through.
-  counts <- cpp_count_voxel_rays(
+  raycounts <- cpp_count_voxel_rays(
     scandata,
     numcols, numheights,
     xysize, xylims[1], xylims[2],
@@ -282,9 +286,11 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
     ground
   )
 
-  totalrays <- array(counts$total, dim = c(numcols, numcols, numheights))
-  reflectedrays <- array(counts$reflected, dim = c(numcols, numcols, numheights))
-  throughrays <- array(counts$through, dim = c(numcols, numcols, numheights))
+  dims <- c(numcols, numcols, numheights)
+  totalrays <- array(raycounts$total, dim = dims)
+  reflectedrays <- array(raycounts$reflected, dim = dims)
+  throughrays <- array(raycounts$through, dim = dims)
+  blockedrays <- array(raycounts$blocked, dim = dims)
 
   # To account for rays that went through a voxel without being returned, compare
   # right through the vegetation without being returned. We need to add these rays
@@ -309,13 +315,16 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   }
 
   # Proportion of reflected rays per voxel
-  preflect <- reflectedrays / (reflectedrays + throughrays)
+  preflected <- reflectedrays / (reflectedrays + throughrays)
 
   # Convert any NaN values, which occur when a voxel had no rays
   # to NA
-  preflect[is.nan(preflect)] <- NA
+  preflected[is.nan(preflected)] <- NA
 
-  res <- list(preflect = preflect)
+  res <- list(preflected = preflected,
+              nreflected = reflectedrays,
+              nthrough = throughrays,
+              nblocked = blockedrays)
 
   # Calculate bounds if probs were specified
   if (length(probs) > 0) {

@@ -27,12 +27,16 @@ each voxel. For example, with \code{probs = c(0.5, 0.9)} lower and upper
 \value{
 A named list with the following elements:
   \describe{
-  \item{preflect}{An array (dimensions: X, Y, Z) of the proportion of rays
+  \item{preflected}{An array (dimensions: X, Y, Z) of the proportion of rays
     reflected for each voxel.}
   \item{bounds_XX}{If argument probs was specified, arrays for lower and
     upper bounds on calculated proportions will be included,
     e.g. setting probs = 0.9 will results in two arrays 'bounds_0.05'
     and 'bounds_0.95'}
+  \item{nreflected}{Array of the number of reflected rays for each voxel.}
+  \item{nthrough}{Array of the number of rays passing through each voxel.}
+  \item{nblocked}{Array of the number of rays that were blocked before
+    reaching each voxel.}
   \item{xysize}{The horizontal voxel width.}
   \item{xlims}{A vector of min and max values for X and Y ordinates.}
   \item{zsize}{The vertical voxel width.}

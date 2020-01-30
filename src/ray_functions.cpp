@@ -20,6 +20,7 @@ List cpp_count_voxel_rays(
 
   arma::ucube reflectedrays;
   arma::ucube throughrays;
+  arma::ucube blockedrays;
   NumericMatrix ground;
 
   if (countReflected) {
@@ -39,6 +40,9 @@ List cpp_count_voxel_rays(
 
     throughrays.set_size(numcols, numcols, numheights);
     throughrays.fill(0);
+
+    blockedrays.set_size(numcols, numcols, numheights);
+    blockedrays.fill(0);
   }
 
   arma::ucube totalrays(numcols, numcols, numheights);
@@ -99,6 +103,7 @@ List cpp_count_voxel_rays(
 
           if (k < reflectedSegment) throughrays(xcol, ycol, zcoladj)++ ;
           else if (k == reflectedSegment) reflectedrays(xcol, ycol, zcoladj)++ ;
+          else blockedrays(xcol, ycol, zcoladj)++ ;
         }
       }
     }
@@ -113,6 +118,7 @@ List cpp_count_voxel_rays(
   if (countReflected) {
     res["through"] = wrap(throughrays.cols(0, numcols-1));
     res["reflected"] = wrap(reflectedrays.cols(0, numcols-1));
+    res["blocked"] = wrap(blockedrays.cols(0, numcols-1));
   }
 
   return res;
