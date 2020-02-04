@@ -1,8 +1,8 @@
 Package: lidarvegdensity
 Type: Package
 Title: Derive vegetation density profiles from terrestrial LiDAR data
-Version: 0.1.4
-Date: 2020-01-30
+Version: 0.1.5
+Date: 2020-02-04
 Authors@R: c(
   person("Nick", "Wilson", role = "aut", email = "ncw291@uowmail.edu.au"),
   person("Michael", "Bedward", role = c("aut", "cre"), email = "michael.bedward@gmail.com")

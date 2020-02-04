@@ -4,8 +4,9 @@
 #' room (i.e. no gaps or reflective surfaces) where all laser pulses are
 #' expected to provide a return.
 #'
-#' @param scandata A three column matrix of XYZ coordinates for return positions
-#'   relative to the scanner.
+#' @param scandata Either a three column matrix or data frame of XYZ coordinates
+#'   for return positions relative to the scanner; or a \code{LAS} object as
+#'   returned by \code{lidR::readLAS}.
 #'
 #' @param xysize The horizontal size (i.e. width in the X-Y plane) of voxels in
 #'   metres.
@@ -51,6 +52,16 @@
 #'
 get_max_returns <- function(scandata, xysize, zsize, numcols,
                             zmax = 35.25, zmin = NULL) {
+
+  if (inherits(scandata, "LAS")) {
+    scandata <- as.matrix(scandata@data[, c("X", "Y", "Z")])
+
+  } else if (is.matrix(scandata) || is.data.frame(scandata)) {
+    if (!ncol(scandata) == 3) {
+      stop("Argument scandata should be a three column matrix or data frame")
+    }
+    scandata <- as.matrix(scandata)
+  }
 
   xysize <- .gtzero( .single_numeric(xysize) )
   zsize <- .gtzero( .single_numeric(zsize) )
@@ -188,9 +199,9 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   zsize <- refdata$zsize
 
   # Check that scan points are within the bounds of the reference model
-  inside.ref <- scandata[,1] >= xylims[1] &&
-    scandata[,1] <= xylims[2] &&
-    scandata[,2] >= xylims[1] &&
+  inside.ref <- scandata[,1] >= xylims[1] &
+    scandata[,1] <= xylims[2] &
+    scandata[,2] >= xylims[1] &
     scandata[,2] <= xylims[2]
 
   if (any(!inside.ref)) {
@@ -219,43 +230,17 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
          "single value for ground elevation to apply to all voxels.")
   }
 
-  # If there are any NA values in ground, set these to the mean
-  # non-NA neighbour value. If any cells have only missing neighbour values
-  # set these (arbitrarily) to the min ground value and issue a warning.
-  if (anyNA(ground)) {
-    warn.nas <- FALSE
-    di <- -1:1
-    km <- matrix(0, nrow=9, ncol=2)
-    clamp <- function(x) max(1,min(x)):min(numcols,max(x))
-    for (ir in 1:numcols) {
-      for (ic in 1:numcols) {
-        x <- 0
-        n <- 0
-        for (kr in clamp(ir + d)) {
-          for (kc in clamp(ic + d)) {
-            g <- ground[kr, kc]
-            if (!is.na(g)) {
-              x <- x + g
-              n <- n + 1
-            }
-          }
-        }
-        if (n > 0) ground[ir, ic] <- x/n
-        else {
-          ground[ir, ic] <- ground.minz
-          warn.nas <- TRUE
-        }
-      }
-    }
+  if (all(is.na(ground)))
+    stop("All ground elevation values are missing.")
 
-    if (warn.nas)
-      warning("Ground elevation for one or more cells could not be determined.\n",
-              "Cell values have been set to overall minimum value.")
+
+  if (anyNA(ground)) {
+    ground <- nibble_matrix(ground)
   }
 
   # Determine the height range and number of voxel height levels.
   # We clamp the height limits to multiples of zsize.
-  ground.minz <- min(ground, na.rm = TRUE)
+  ground.minz <- min(ground)
   minz <- (trunc(ground.minz / zsize) - 1) * zsize
   maxz <- (trunc(max(scandata[,3]) / zsize) + 1) * zsize
 
@@ -386,6 +371,55 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   }
 }
 
+#' Iteratively replace NA values in a numeric matrix
+#'
+#' This function iteratively replaces missing values in a numeric matrix with
+#' the mean of neighbouring cell values. Both orthogonal and diagonal neighbours
+#' are included when calculating the mean value. The function is used by
+#' \code{get_prop_reflected} to remove missing values from ground elevation
+#' matrices.
+#'
+#' @param M A numeric matrix possibly containing missing values
+#'
+#' @return A numeric matrix with missing values replaced. If all values were
+#'   missing in the input matrix, a warning message is issues and the matrix is
+#'   returned unchanged.
+#'
+#' @export
+#'
+nibble_matrix <- function(M) {
+  stopifnot(is.matrix(M))
+  di <- -1:1
 
+  clamp <- function(j) max(1,min(j)):min(ncol(M),max(j))
 
+  na.inds <- which(is.na(M), arr.ind = TRUE)
+  if (nrow(na.inds) == nrow(M)) {
+    warning("All values are missing in input matrix")
+    return(M)
+  }
+
+  while (nrow(na.inds) > 0) {
+    nfixed <- 0
+    for (ina in 1:nrow(na.inds)) {
+      ir <- na.inds[ina,1]
+      ic <- na.inds[ina,2]
+      kr <- clamp(ir + di)
+      kc <- clamp(ic + di)
+      k.inds <- as.matrix(expand.grid(kr, kc))
+      val <- mean(M[k.inds], na.rm = TRUE)
+      if (!is.na(val)) {
+        M[ir,ic] <- val
+        nfixed <- nfixed + 1
+      }
+    }
+
+    # If we failed to fix any of the NA cells on this iteration
+    # it's time to give up
+    if (nfixed == 0) break
+    else na.inds <- which(is.na(M), arr.ind = TRUE)
+  }
+
+  M
+}
 

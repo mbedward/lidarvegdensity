@@ -7,8 +7,9 @@
 get_max_returns(scandata, xysize, zsize, numcols, zmax = 35.25, zmin = NULL)
 }
 \arguments{
-\item{scandata}{A three column matrix of XYZ coordinates for return positions
-relative to the scanner.}
+\item{scandata}{Either a three column matrix or data frame of XYZ coordinates
+for return positions relative to the scanner; or a \code{LAS} object as
+returned by \code{lidR::readLAS}.}
 
 \item{xysize}{The horizontal size (i.e. width in the X-Y plane) of voxels in
 metres.}
