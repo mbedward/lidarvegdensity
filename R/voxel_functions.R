@@ -326,7 +326,7 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
       }
 
       x <- array(x, dim = dim(reflectedrays))
-      x[is.na(preflect)] <- NA
+      x[is.na(preflected)] <- NA
       x
     })
 
