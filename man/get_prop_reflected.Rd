@@ -4,28 +4,47 @@
 \alias{get_prop_reflected}
 \title{Main function to process scans}
 \usage{
-get_prop_reflected(scandata, refdata, ground, probs = NULL)
+get_prop_reflected(
+  scandata,
+  refdata,
+  ground,
+  probs = NULL,
+  fail.xy = FALSE,
+  fail.z = TRUE
+)
 }
 \arguments{
 \item{scandata}{Either a three column matrix or data frame of XYZ coordinates
 for return positions relative to the scanner; or a \code{LAS} object as
 returned by \code{lidR::readLAS}.}
 
-\item{refdata}{A named list, as returned by the function
+\item{refdata}{A \code{TLSNullModel} object, as returned by the function
 \code{get_max_returns()}, containing an array of the estimated maximum
 number of returns for each voxel plus the voxel and scan dimensions.}
 
-\item{ground}{A square matrix where values are ground elevation for each
-voxel. The dimensions of the matrix must match the value of element
-\code{numcols} in \code{refdata}.}
+\item{ground}{Either a square numeric matrix, or a \code{RasterLayer} object,
+where values are ground elevation for each voxel. The number of rows and
+columns of the matrix or raster be the value of element \code{numcols} in
+\code{refdata}.}
 
 \item{probs}{Optionally, one or more probability values (0 to 1). If
 provided, bounds on the proportion of reflected rays are calculated for
 each voxel. For example, with \code{probs = c(0.5, 0.9)} lower and upper
 50 and 90 percent bounds will be calculated.}
+
+\item{fail.xy}{If \code{TRUE}, the function will stop with an error if any
+scan points lie outside the horizontal bounds of the reference model. If
+\code{FALSE} (the default), the function will issue a warning and ignore
+the points.}
+
+\item{fail.z}{If \code{TRUE} (the default), the function will stop with an
+error if any scan point lie above or below the vertical limits of the
+reference model. If \code{FALSE}, the function will issue a warning and
+ignore the points.}
 }
 \value{
-A named list with the following elements:
+A named list (object of class \code{TLSResult}) with the following
+  elements:
   \describe{
   \item{preflected}{An array (dimensions: X, Y, Z) of the proportion of rays
     reflected for each voxel.}

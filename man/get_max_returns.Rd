@@ -31,10 +31,11 @@ zmax is positive. If \code{zmax} is zero or negative an explicit value must
 be provided.}
 }
 \value{
-A named list with the following elements:
+A named list (object of class \code{TLSNullModel}) with the following
+  elements:
   \describe{
-  \item{returns}{An array (dimensions: X, Y, Z) of maximum expected number
-    of rays passing through each voxel.}
+  \item{returns}{An array (dimensions: Yrow, Xcol, Zlayer) of maximum
+    expected number of rays passing through each voxel.}
   \item{xysize}{The horizontal voxel width.}
   \item{xlims}{A vector of min and max values for X and Y ordinates.}
   \item{zsize}{The vertical voxel width.}

@@ -23,6 +23,10 @@ List cpp_count_voxel_rays(
   arma::ucube blockedrays;
   NumericMatrix ground;
 
+  // tolerance to use for checking that x,y,z coordinates are
+  // within bounds
+  const double TOL = 1e-4;
+
   if (countReflected) {
     if (groundarg.isNull()) {
       throw std::runtime_error("Matrix of ground elevations must be provided to count reflections");
@@ -32,7 +36,7 @@ List cpp_count_voxel_rays(
 
     // check ground elevation matrix
     if (!(ground.ncol() == numcols && ground.nrow() == numcols)) {
-      throw std::runtime_error(std::string("Incorrect ground matrix size"));
+      stop("Incorrect ground matrix size. Expected %i rows and columns", numcols);
     }
 
     reflectedrays.set_size(numcols, numcols, numheights);
@@ -87,23 +91,37 @@ List cpp_count_voxel_rays(
       double yn = (k + 0.5) * delta * yo;
       double zn = (k + 0.5) * delta * zo;
 
-      int xcol = std::trunc((xn - minxy) / xysize);
-      int ycol = std::trunc((yn - minxy) / xysize);
+      // guard against points right on boundary
+      if (xn > minxy + TOL &&
+          xn < maxxy - TOL &&
+          yn > minxy + TOL &&
+          yn < maxxy - TOL) {
 
-      // and need the z columns
-      int zcol = std::trunc((zn - minz) / zsize);
+        // x col index
+        int xcol = std::trunc((xn - minxy) / xysize);
 
-      // increment the total number of rays in the voxel
-      totalrays(xcol, ycol, zcol)++ ;
+        // y row index, calculated as per raster package row indexing
+        // with the first row being max Y ordinate and last row being
+        // min Y ordinate
+        int yrow = numcols - 1 - std::trunc((yn - minxy) / xysize);
 
-      if (countReflected) {
-        double znadj = zn - ground(xcol, ycol);
-        if (znadj > 0) {
-          int zcoladj = std::trunc(znadj / zsize);
+        int zlayer = std::trunc((zn - minz) / zsize);
 
-          if (k < reflectedSegment) throughrays(xcol, ycol, zcoladj)++ ;
-          else if (k == reflectedSegment) reflectedrays(xcol, ycol, zcoladj)++ ;
-          else blockedrays(xcol, ycol, zcoladj)++ ;
+        if (zlayer < 0 || zlayer >= numheights) {
+          stop("out of bounds: zlayer (%i) for z (%f)", zlayer, zn);
+        }
+
+        // increment the total number of observed rays in the voxel
+        totalrays(yrow, xcol, zlayer)++ ;
+
+        if (countReflected) {
+          double znadj = zn - ground(yrow, xcol);
+          if (znadj > 0) {
+            int zlayeradj = std::trunc(znadj / zsize);
+            if (k < reflectedSegment) throughrays(yrow, xcol, zlayeradj)++ ;
+            else if (k == reflectedSegment) reflectedrays(yrow, xcol, zlayeradj)++ ;
+            else blockedrays(yrow, xcol, zlayeradj)++ ;
+          }
         }
       }
     }

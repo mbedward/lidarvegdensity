@@ -3,5 +3,6 @@
 export(get_max_returns)
 export(get_prop_reflected)
 export(nibble_matrix)
+export(res_to_brick)
 importFrom(Rcpp,sourceCpp)
 useDynLib(lidarvegdensity, .registration = TRUE)

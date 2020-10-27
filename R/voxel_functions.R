@@ -27,10 +27,11 @@
 #'   zmax is positive. If \code{zmax} is zero or negative an explicit value must
 #'   be provided.
 #'
-#' @return A named list with the following elements:
+#' @return A named list (object of class \code{TLSNullModel}) with the following
+#'   elements:
 #'   \describe{
-#'   \item{returns}{An array (dimensions: X, Y, Z) of maximum expected number
-#'     of rays passing through each voxel.}
+#'   \item{returns}{An array (dimensions: Yrow, Xcol, Zlayer) of maximum
+#'     expected number of rays passing through each voxel.}
 #'   \item{xysize}{The horizontal voxel width.}
 #'   \item{xlims}{A vector of min and max values for X and Y ordinates.}
 #'   \item{zsize}{The vertical voxel width.}
@@ -108,10 +109,14 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
   # vector appropriately)
   counts <- array(counts$total, dim = c(numcols, numcols, numheights))
 
-  list(returns = counts,
-       xysize = xysize, xylims = xylims,
-       zsize = zsize, zlims = c(zmin, zmax),
-       numcols = numcols, numheights = numheights)
+  res <- list(returns = counts,
+              xysize = xysize, xylims = xylims,
+              zsize = zsize, zlims = c(zmin, zmax),
+              numcols = numcols, numheights = numheights)
+
+  class(res) <- "TLSNullModel"
+
+  res
 }
 
 
@@ -139,20 +144,32 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #'   for return positions relative to the scanner; or a \code{LAS} object as
 #'   returned by \code{lidR::readLAS}.
 #'
-#' @param refdata A named list, as returned by the function
+#' @param refdata A \code{TLSNullModel} object, as returned by the function
 #'   \code{get_max_returns()}, containing an array of the estimated maximum
 #'   number of returns for each voxel plus the voxel and scan dimensions.
 #'
-#' @param ground A square matrix where values are ground elevation for each
-#'   voxel. The dimensions of the matrix must match the value of element
-#'   \code{numcols} in \code{refdata}.
+#' @param ground Either a square numeric matrix, or a \code{RasterLayer} object,
+#'   where values are ground elevation for each voxel. The number of rows and
+#'   columns of the matrix or raster be the value of element \code{numcols} in
+#'   \code{refdata}.
 #'
 #' @param probs Optionally, one or more probability values (0 to 1). If
 #'   provided, bounds on the proportion of reflected rays are calculated for
 #'   each voxel. For example, with \code{probs = c(0.5, 0.9)} lower and upper
 #'   50 and 90 percent bounds will be calculated.
 #'
-#' @return A named list with the following elements:
+#' @param fail.xy If \code{TRUE}, the function will stop with an error if any
+#'   scan points lie outside the horizontal bounds of the reference model. If
+#'   \code{FALSE} (the default), the function will issue a warning and ignore
+#'   the points.
+#'
+#' @param fail.z If \code{TRUE} (the default), the function will stop with an
+#'   error if any scan point lie above or below the vertical limits of the
+#'   reference model. If \code{FALSE}, the function will issue a warning and
+#'   ignore the points.
+#'
+#' @return A named list (object of class \code{TLSResult}) with the following
+#'   elements:
 #'   \describe{
 #'   \item{preflected}{An array (dimensions: X, Y, Z) of the proportion of rays
 #'     reflected for each voxel.}
@@ -174,7 +191,14 @@ get_max_returns <- function(scandata, xysize, zsize, numcols,
 #'
 #' @export
 #'
-get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
+get_prop_reflected <- function(scandata, refdata, ground,
+                               probs = NULL,
+                               fail.xy = FALSE,
+                               fail.z = TRUE) {
+
+  if (!inherits(refdata, "TLSNullModel")) {
+    stop("refdata should be a named list of class TLSNullModel")
+  }
 
   if (inherits(scandata, "LAS")) {
     scandata <- as.matrix(scandata@data[, c("X", "Y", "Z")])
@@ -198,27 +222,58 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   xysize <- refdata$xysize
   zsize <- refdata$zsize
 
-  # Check that scan points are within the bounds of the reference model
-  inside.ref <- scandata[,1] >= xylims[1] &
-    scandata[,1] <= xylims[2] &
-    scandata[,2] >= xylims[1] &
-    scandata[,2] <= xylims[2]
+  # Check that scan points are within the horizontal bounds of the reference model
+  ok <- scandata[,1] >= xylims[1] & scandata[,1] < xylims[2] &
+                scandata[,2] >= xylims[1] & scandata[,2] < xylims[2]
 
-  if (any(!inside.ref)) {
-    n <- sum(!inside.ref)
+  if (any(!ok)) {
+    n <- sum(!ok)
     msg <- ifelse(n == 1, "point is outside", "points are outside")
-    msg <- glue::glue("{n} {msg} the bounds of the reference model and will be ignored")
-    warning(msg)
+    msg <- glue::glue("{n} {msg} the horizontal bounds of the reference model")
+
+    if (fail.xy) {
+      stop(msg)
+    }
+
+    # fail.xy is FALSE so just issue a warning and remove the points
+    msg <- glue::glue("{msg} and will be ignored")
+    warning(msg, immediate. = TRUE)
+    scandata <- scandata[ok, ]
+  }
+
+  # Check for points beyond the vertical range of the reference model
+  ok <- scandata[,3] >= refdata$zlims[1] & scandata[,3] <= refdata$zlims[2]
+  if (any(!ok)) {
+    n <- sum(!ok)
+    msg <- ifelse(n == 1, "point is outside", "points are outside")
+    msg <- glue::glue("{n} {msg} the vertical limits of the reference model")
+
+    if (fail.z) {
+      stop(msg)
+    }
+
+    # fail.z is FALSE so just issue a warning and remove the points
+    msg <- glue::glue("{msg} and will be ignored")
+    warning(msg, immediate. = TRUE)
+    scandata <- scandata[ok, ]
+  }
+
+  # Make sure we still have some data
+  if (nrow(scandata) == 0) {
+    stop("No remaining scan data")
   }
 
   # Check ground elevation data
-  if (is.matrix(ground)) {
+  if (inherits(ground, c("matrix", "RasterLayer"))) {
     if (nrow(ground) != refdata$numcols ||
         ncol(ground) != refdata$numcols) {
 
-      stop("The matrix of ground elevations should be square, with number of\n",
-           "rows and columns equal to the 'numcols' value in refdata")
+      stop("The matrix or RasterLayer of ground elevations should be square,\n",
+           "with the number of rows and columns equal to the 'numcols' value\n",
+           "in refdata")
     }
+
+    ground <- as.matrix(ground)
 
   } else if (is.numeric(ground)) {
     ground <- .single_numeric(ground)
@@ -240,17 +295,13 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
 
   # Determine the height range and number of voxel height levels.
   # We clamp the height limits to multiples of zsize.
-  ground.minz <- min(ground)
-  minz <- (trunc(ground.minz / zsize) - 1) * zsize
+  minz <- min(ground)
+  minz <- (trunc(minz / zsize) - 1) * zsize
   maxz <- (trunc(max(scandata[,3]) / zsize) + 1) * zsize
 
   stopifnot(maxz > minz)
   numheights <- (maxz - minz) / zsize
 
-
-  # Find the index of the height dimension in the reference data array
-  # that corresponds with the ground elevation for each voxel column
-  ground.minzindex <- trunc((ground - refdata$zlims[1]) / zsize) + 1
 
   # Z-index offset for reference model.
   ref.zoffset <- (minz - refdata$zlims[1]) / zsize
@@ -277,23 +328,23 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   throughrays <- array(raycounts$through, dim = dims)
   blockedrays <- array(raycounts$blocked, dim = dims)
 
-  # To account for rays that went through a voxel without being returned, compare
-  # right through the vegetation without being returned. We need to add these rays
-  # into the 'through' tally by comaprison with a null model in a closed room.
-  for (xindex in 1:numcols) {
-    for (yindex in 1:numcols) {
-      for (zindex in 1:numheights) {
+  # To account for rays that went through a voxel without being returned,
+  # we need to add these rays into the 'through' tally by comparison with
+  # the null model scan performed in a closed room.
+  for (yrow in 1:numcols) {
+    for (xcol in 1:numcols) {
+      for (zlayer in 1:numheights) {
         # Check if we have less rays in the voxel than expected (because
         # some went through). If so, increase the through count.
-        expected <- refdata$returns[xindex, yindex, zindex + ref.zoffset]
-        if (totalrays[xindex,yindex,zindex] < expected) {
-          nadd <- expected - totalrays[xindex, yindex, zindex]
+        expected <- refdata$returns[yrow, xcol, zlayer + ref.zoffset]
+        if (totalrays[yrow, xcol, zlayer] < expected) {
+          nadd <- expected - totalrays[yrow, xcol, zlayer]
 
-          zminlimit <- (zindex-1) * zsize + minz
+          zminlimit <- (zlayer-1) * zsize + minz
           z <- zminlimit + zsize/2
-          zadj <- z - ground[xindex,yindex]
-          zcoladj <- trunc(zadj / zsize) + 1
-          throughrays[xindex,yindex,zcoladj] <- throughrays[xindex,yindex,zcoladj] + nadd
+          zadj <- z - ground[yrow, xcol]
+          zlayer.adj <- trunc(zadj / zsize) + 1
+          throughrays[yrow, xcol, zlayer.adj] <- throughrays[yrow, xcol, zlayer.adj] + nadd
         }
       }
     }
@@ -336,90 +387,13 @@ get_prop_reflected <- function(scandata, refdata, ground, probs = NULL) {
   }
 
   # Return results
-  c(res,
-    list(xysize = xysize, xylims = xylims,
-         zsize = zsize, zlims = c(minz, maxz),
-         numcols = numcols, numheights = numheights) )
-}
+  res <- c(res,
+           list(xysize = xysize, xylims = xylims,
+                zsize = zsize, zlims = c(minz, maxz),
+                numcols = numcols, numheights = numheights) )
 
+  class(res) <- "TLSResult"
 
-
-.single_numeric <- function(x) {
-  if (is.numeric(x) && length(x) == 1) {
-    x
-  } else {
-    nm <- deparse(substitute(x))
-    paste(nm, "should be a single numeric value")
-  }
-}
-
-.single_integer <- function(x) {
-  if (is.integer(x) && length(x) == 1) {
-    x
-  } else {
-    nm <- deparse(substitute(x))
-    paste(nm, "should be a single integer value")
-  }
-}
-
-.gtzero <- function(x) {
-  if (is.numeric(x) && all(x > 0)) {
-    x
-  } else {
-    nm <- deparse(substitute(x))
-    paste(nm, "should be greater than zero")
-  }
-}
-
-#' Iteratively replace NA values in a numeric matrix
-#'
-#' This function iteratively replaces missing values in a numeric matrix with
-#' the mean of neighbouring cell values. Both orthogonal and diagonal neighbours
-#' are included when calculating the mean value. The function is used by
-#' \code{get_prop_reflected} to remove missing values from ground elevation
-#' matrices.
-#'
-#' @param M A numeric matrix possibly containing missing values
-#'
-#' @return A numeric matrix with missing values replaced. If all values were
-#'   missing in the input matrix, a warning message is issues and the matrix is
-#'   returned unchanged.
-#'
-#' @export
-#'
-nibble_matrix <- function(M) {
-  stopifnot(is.matrix(M))
-  di <- -1:1
-
-  clamp <- function(j) max(1,min(j)):min(ncol(M),max(j))
-
-  na.inds <- which(is.na(M), arr.ind = TRUE)
-  if (nrow(na.inds) == nrow(M)) {
-    warning("All values are missing in input matrix")
-    return(M)
-  }
-
-  while (nrow(na.inds) > 0) {
-    nfixed <- 0
-    for (ina in 1:nrow(na.inds)) {
-      ir <- na.inds[ina,1]
-      ic <- na.inds[ina,2]
-      kr <- clamp(ir + di)
-      kc <- clamp(ic + di)
-      k.inds <- as.matrix(expand.grid(kr, kc))
-      val <- mean(M[k.inds], na.rm = TRUE)
-      if (!is.na(val)) {
-        M[ir,ic] <- val
-        nfixed <- nfixed + 1
-      }
-    }
-
-    # If we failed to fix any of the NA cells on this iteration
-    # it's time to give up
-    if (nfixed == 0) break
-    else na.inds <- which(is.na(M), arr.ind = TRUE)
-  }
-
-  M
+  res
 }
 
